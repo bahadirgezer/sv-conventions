@@ -6,6 +6,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import org.hibernate.annotations.Formula;
+import org.hibernate.annotations.Where;
 
 import javax.persistence.*;
 import java.util.HashSet;
@@ -16,24 +18,29 @@ import java.util.Set;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
+//@Where(clause = "deleted = false")
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class Account {
+
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
-    @Column(nullable = false, unique = true, insertable = false, updatable = false)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id", nullable = false, unique = true, insertable = false, updatable = false)
     Long id;
 
-    @Column(nullable = false, unique = true)
+    @Column(name = "email", nullable = false, unique = true)
     String email;
 
-    @Column(nullable = false, unique = true)
+    @Column(name = "username", nullable = false, unique = true)
     String username;
 
     @JsonIgnore
     @OneToMany(mappedBy = "owner")
-    private Set<Comment> comments = new HashSet<Comment>();
+    Set<Comment> comments = new HashSet<Comment>();
 
-    @Column(nullable = false, name = "comment_count")
-    private Long commentCount;
+    //@Formula("")
+    @Column(name = "comment_count", nullable = false)
+    Long commentCount;
 
+    @Column(name = "deleted", nullable = false)
+    Boolean deleted;
 }

@@ -2,256 +2,257 @@ package compaintvar.convention.service;
 
 import com.sun.istack.NotNull;
 import compaintvar.convention.dto.AccountDTO;
+import compaintvar.convention.dto.CommentDTO;
 import compaintvar.convention.entity.Account;
+import compaintvar.convention.entity.Comment;
 import compaintvar.convention.exceptions.DuplicateEntityError;
+import compaintvar.convention.exceptions.MsDBOperationException;
 import compaintvar.convention.exceptions.ResourceNotFoundException;
 import compaintvar.convention.repository.AccountRepository;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
-@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
+@FieldDefaults(level = AccessLevel.PRIVATE)
 public class AccountService {
-    AccountRepository accountRepository;
+
+    final AccountRepository accountRepository;
 
     /**
-     * Parametre olarak verilen ID'ye gore databaseden Account objesi cekiyor.
-     * Bu obje DTO olarak donduruluyor.
+     * Verilen id değerine sahip hesabı doner.
      *
-     * Comment limiti belirlenebiliyor. Default value controllerda ayarlanmaktadir.
-     *
-     * @param id Istenen Account objesinin ID'si
-     * @return Istenen Account objesinin DTO'su
+     * @param id            Hesabın id değeri
+     * @param commentLimit  Hesaba ait gösterilecek yorum sayısı limiti
+     * @return              Hesap bilgileri
      */
     public AccountDTO getAccountById(Long id, Integer commentLimit) {
         Account account;
 
-        log.debug(String.format("Fetching account with ID: %d.", id));
         try {
-            account = accountRepository.findAccountById(id);
+            account = accountRepository.findAccountByIdAndDeletedFalse(id);
         } catch (Exception e) {
-            log.debug(String.format("Database query exception: Account fetch with ID: %d failed.", id));
-            e.printStackTrace();
-            return null;
+            log.error(e.getMessage(), e);
+            throw new MsDBOperationException("Unable to get account");
         }
 
         if (account == null) {
-            log.debug(String.format("Account with ID: %d not found.", id));
-            throw new ResourceNotFoundException(String.format("Account (ID: %d) not found.", id));
+            throw new ResourceNotFoundException(
+                    "Account with id = " + id + " does not exist");
         }
 
-        return new AccountDTO(account.getId(),
+        return new AccountDTO(
+                account.getId(),
                 account.getEmail(),
                 account.getUsername(),
-                account.getComments() // Butun commentleri dondurmek istemiyoruz
+                account.getComments()
                         .stream().limit(commentLimit)
+                        .map(comment -> new CommentDTO(
+                                comment.getId(),
+                                comment.getContent(),
+                                comment.getOwner(),
+                                comment.getPrevious(),
+                                comment.getNext()
+                        ))
                         .collect(Collectors.toSet()),
                 account.getCommentCount());
     }
 
     /**
-     * Verilen AccountDTO objesini database'e kayit ediyor.
+     * Verilen AccountDTO hesap bilgilerini kayit eder.
      *
-     * @param accountDTO Olusturulmak istenen Account
-     * @return Kaydedilen Account'un DTO'su
+     * @param accountDTO    Olusturulmak istenen Account
+     * @return              Kaydedilen Account'un id degeri
      */
-    public AccountDTO createAccount(@NotNull AccountDTO accountDTO) {
-        log.debug(String.format("Creating new account (ID: %d, username: %s, email: %s).",
-                accountDTO.getId(), accountDTO.getUsername(), accountDTO.getEmail()));
+    public Long createAccount(@NotNull AccountDTO accountDTO) {
         Account account =
-                new Account(accountDTO.getId(),
+                new Account(
+                        accountDTO.getId(),
                         accountDTO.getEmail(),
                         accountDTO.getUsername(),
-                        accountDTO.getComments(),
-                        accountDTO.getCommentCount());
+                        accountDTO.getComments()
+                                .stream()
+                                .map(commentDTO -> new Comment(
+                                        commentDTO.getId(),
+                                        commentDTO.getContent(),
+                                        commentDTO.getOwner(),
+                                        commentDTO.getPrevious(),
+                                        commentDTO.getNext(),
+                                        false
+                                ))
+                                .collect(Collectors.toSet()),
+                        accountDTO.getCommentCount(),
+                false);
 
-        if (!checkAccountUniqueness(account)) { //if account is not unique
-            return null;
-        }
+        if (accountRepository.existsByEmail(account.getEmail()))
+            throw new DuplicateEntityError(
+                    String.format("Cannot do operation: Email %s is already in use.", account.getEmail()));
+
+        if (accountRepository.existsByUsername(account.getUsername()))
+            throw new DuplicateEntityError(
+                    String.format("Cannot do operation: Username %s is already in use.", account.getUsername()));
 
         Account savedAccount;
         try {
             savedAccount = accountRepository.save(account);
         } catch (Exception e) {
-            log.debug(String.format(
-                    "Database query exception: Account save with ID: %d failed.", account.getId()));
-            e.printStackTrace();
-            return null;
+            log.error(e.getMessage(), e);
+            throw new MsDBOperationException("Unable to save account");
         }
 
-        return new AccountDTO(savedAccount.getId(),
-                savedAccount.getEmail(),
-                savedAccount.getUsername(),
-                savedAccount.getComments(),
-                savedAccount.getCommentCount());
+        return savedAccount.getId();
     }
 
     /**
-     * ID'si verilen Account'un username'ini guncelliyor.
+     * Account username'ini ve email'ini gunceller.
      *
-     * @param id Istenen Account objesinin ID'si
-     * @param username yeni username
-     * @return Kaydedilen Account'un DTO'su
+     * @param id        Guncellenen Account'un id degeri
+     * @param username  Yeni username
+     * @param email     Yeni email
+     * @return          Guncellenen Account'un id degeri
      */
-    public AccountDTO updateUsername(Long id, String username) {
+    public Long updateUsernameEmail(Long id, String username, String email) {
         Account account;
 
-        log.debug(String.format("Fetching account with ID: %d.", id));
         try {
-            account = accountRepository.findAccountById(id);
+            account = accountRepository.findAccountByIdAndDeletedFalse(id);
         } catch (Exception e) {
-            log.debug(String.format("Database query exception: Account fetch with ID: %d failed.", id));
-            e.printStackTrace();
-            return null;
+            log.error(e.getMessage(), e);
+            throw new MsDBOperationException("Unable to get account");
         }
         if (account == null) {
-            log.debug(String.format("Account with ID: %d not found.", id));
-            throw new ResourceNotFoundException(String.format("Account (ID: %d) not found.", id));
+            throw new ResourceNotFoundException(
+                    "Account with id = " + id + " does not exist");
         }
 
-        account.setUsername(username);
-        if (!checkAccountUniqueness(account)) { //if account is not unique
-            return null;
-        }
+        if (email != null)
+            account.setEmail(email);
+            if (accountRepository.existsByEmail(account.getEmail()))
+                throw new DuplicateEntityError(
+                        String.format("Cannot do operation: Email %s is already in use.", account.getEmail()));
+
+        if (username != null)
+            account.setUsername(username);
+            if (accountRepository.existsByUsername(account.getUsername()))
+                throw new DuplicateEntityError(
+                        String.format("Cannot do operation: Username %s is already in use.", account.getUsername()));
 
         Account savedAccount;
         try {
             savedAccount = accountRepository.save(account);
         } catch (Exception e) {
-            log.debug(String.format(
-                    "Database query exception: Account save with ID: %d failed.", account.getId()));
-            e.printStackTrace();
-            return null;
+            log.error(e.getMessage(), e);
+            throw new MsDBOperationException("Unable to save account");
         }
 
-        return new AccountDTO(savedAccount.getId(),
-                savedAccount.getEmail(),
-                savedAccount.getUsername(),
-                savedAccount.getComments(),
-                savedAccount.getCommentCount());
+        return savedAccount.getId();
     }
 
     /**
-     * ID'si verilen Account'un email'ini guncelliyor.
+     * Hesabi siler. (soft-delete)
      *
-     * @param id Istenen Account objesinin ID'si
-     * @param email yeni email
-     * @return Kaydedilen Account'un DTO'su
+     * @param id    Silinecek Account'un id degeri
+     * @return
      */
-    public AccountDTO updateEmail(Long id, String email) {
-        Account account;
-
-        log.debug(String.format("Fetching account with ID: %d.", id));
-        try {
-            account = accountRepository.findAccountById(id);
-        } catch (Exception e) {
-            log.debug(String.format("Database query exception: Account fetch with ID: %d failed.", id));
-            e.printStackTrace();
-            return null;
-        }
-        if (account == null) {
-            log.debug(String.format("Account with ID: %d not found.", id));
-            throw new ResourceNotFoundException(String.format("Account (ID: %d) not found.", id));
-        }
-
-        account.setEmail(email);
-        if (!checkAccountUniqueness(account)) { //if account is not unique
-            return null;
-        }
-
-        Account savedAccount;
-        try {
-            savedAccount = accountRepository.save(account);
-        } catch (Exception e) {
-            log.debug(String.format(
-                    "Database query exception: Account save with ID: %d failed.", account.getId()));
-            e.printStackTrace();
-            return null;
-        }
-
-        return new AccountDTO(savedAccount.getId(),
-                savedAccount.getEmail(),
-                savedAccount.getUsername(),
-                savedAccount.getComments(),
-                savedAccount.getCommentCount());
-    }
-
-    /**
-     * Parametre olarak verilen account objesinin biricikligini kontrol eder.
-     *
-     * Email ve username biricik olmali.
-     *
-     * @param account Kontrol edilmek istenen Account
-     * @return Biricik ise True degilse False
-     */
-    private Boolean checkAccountUniqueness(Account account) {
-        Account emailCheck;
-        try {
-            emailCheck = accountRepository.findAccountByEmail(account.getEmail());
-        } catch (Exception e) {
-            log.debug(String.format(
-                    "Database query exception: Account fetch with email: %s failed.", account.getEmail()));
-            e.printStackTrace();
-            return false;
-        }
-        if (emailCheck != null) { //if an object with the same email exists
-            log.debug(String.format(
-                    "Email %s is in use.", account.getEmail()));
-            throw new DuplicateEntityError(
-                    String.format("Cannot create new account: Username %s is already in use.", emailCheck.getEmail()));
-        } //email check done
-
-        Account usernameCheck;
-        try {
-            usernameCheck = accountRepository.findAccountByUsername(account.getUsername());
-        } catch (Exception e) {
-            log.debug(String.format(
-                    "Database query exception: Account fetch with username: %s failed.", account.getUsername()));
-            e.printStackTrace();
-            return false;
-        }
-        if (usernameCheck != null) { //if an object with the same email exits
-            log.debug(String.format(
-                    "Username %s is in use.", account.getUsername()));
-            throw new DuplicateEntityError(
-                    String.format("Cannot create new account: Email %s is already in use.", account.getUsername()));
-        } //username check done
-        return true;
-    }
-
     public Boolean deleteAccount(Long id) {
         Account account;
 
-        log.debug(String.format("Fetching account with ID: %d.", id));
         try {
-            account = accountRepository.findAccountById(id);
+            account = accountRepository.findAccountByIdAndDeletedFalse(id);
         } catch (Exception e) {
-            log.debug(String.format("Database query exception: Account fetch with ID: %d failed.", id));
-            e.printStackTrace();
-            return false;
+            log.error(e.getMessage(), e);
+            throw new MsDBOperationException("Unable to get account");
         }
         if (account == null) {
-            log.debug(String.format("Account with ID: %d not found.", id));
-            throw new ResourceNotFoundException(String.format("Account (ID: %d) not found.", id));
+            throw new ResourceNotFoundException(
+                    "Account with id = " + id + " does not exist");
         }
 
-        log.debug(String.format("Deleting account with ID: %d.", id));
+        account.setDeleted(true);
+
+        Account savedAccount;
         try {
-            accountRepository.delete(account);
+            savedAccount = accountRepository.save(account);
         } catch (Exception e) {
-            log.debug(String.format("Database query exception: Account deletion with ID: %d failed.", id));
-            e.printStackTrace();
-            return false;
+            log.error(e.getMessage(), e);
+            throw new MsDBOperationException("Unable to save account");
         }
 
         return true;
     }
 
+    /**
+     * Hesaplari sayfalandirilmis sekilde doner.
+     * Default olarak id ile ascending siralar.
+     *
+     * @param page          Sayfa numarasi
+     * @param size          Sayfadaki hesap sayisi
+     * @param sortBy        Siralama icin field bilgisi
+     * @param descending    Azalan siralama ayari
+     * @param commentLimit  Hesabin gösterilecek yorum sayısına limit
+     * @return              Istenen sayfadaki Account'larin listesi
+     */
+    public List<AccountDTO> getAccountsPaginated(Integer page,
+                                                 Integer size,
+                                                 String sortBy,
+                                                 Boolean descending,
+                                                 Integer commentLimit) {
+        Sort sort = null;
+        if (!sortBy.isBlank()) {
+            if (descending) {
+                sort = Sort.by(sortBy).descending();
+            } else {
+                sort = Sort.by(sortBy).ascending();
+            }
+        }
+        if (sort == null) {
+            sort = Sort.by("id");
+        }
+
+        Pageable pageable = PageRequest.of(page, size, sort);
+        Page<Account> pagedResult;
+        try {
+            pagedResult =  accountRepository.findAll(pageable);
+        } catch (Exception e) {
+            log.error(e.getMessage(), e);
+            throw new MsDBOperationException("Unable to get page.");
+        }
+        if (pagedResult == null) {
+            throw new ResourceNotFoundException(
+                    String.format("Page request with page = %d, size = %d, sortBy = %s failed.",
+                            page, size, sortBy));
+        }
+
+        if (pagedResult.hasContent()) {
+            return pagedResult.getContent().stream()
+                    .map(account -> new AccountDTO(
+                            account.getId(),
+                            account.getEmail(),
+                            account.getUsername(),
+                            account.getComments()
+                                    .stream().limit(commentLimit)
+                                    .map(comment -> new CommentDTO(
+                                            comment.getId(),
+                                            comment.getContent(),
+                                            comment.getOwner(),
+                                            comment.getPrevious(),
+                                            comment.getNext()
+                                    )).collect(Collectors.toSet()),
+                            account.getCommentCount())
+                    ).collect(Collectors.toList());
+        }
+        return new ArrayList<AccountDTO>();
+    }
 }
