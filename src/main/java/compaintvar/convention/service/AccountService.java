@@ -19,6 +19,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
+import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -255,4 +256,41 @@ public class AccountService {
         }
         return new ArrayList<AccountDTO>();
     }
+
+    /**
+     * Silinmis hesabi hesabi geri getirir.
+     *
+     * @param id    Geri getirilecek hesbain id degeri
+     * @return      Geri getirilen hesabin id degeri
+     */
+    @Transactional
+    public Long retrieveAccount(Long id) {
+        Account account;
+
+        try {
+            accountRepository.retrieveDeletedAccount(id);
+        } catch (Exception e) {
+            log.error(e.getMessage(), e);
+            throw new MsDBOperationException("Unable to get account");
+        }
+
+        return id;
+    }
+
+    /**
+     * Butun hesaplari geri getirir.
+     *
+     * @return
+     */
+    @Transactional
+    public void retrieveAccounts() {
+
+        try {
+            accountRepository.retrieveDeletedAccounts();
+        } catch (Exception e) {
+            log.error(e.getMessage(), e);
+            throw new MsDBOperationException("Unable to get account");
+        }
+    }
+
 }

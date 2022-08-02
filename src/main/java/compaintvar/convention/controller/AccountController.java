@@ -116,4 +116,32 @@ public class AccountController {
 
         return ResponseEntity.ok().body(accounts);
     }
+
+    /**
+     * A6: Silinen hesabi geri getirir.
+     *
+     * @param id    Geri getirelecek hesabin id degeri
+     * @return      HTTP 202 | 404
+     */
+    @PutMapping("/{id}")
+    public ResponseEntity<AccountDTO> retrieveDeletedAccount(@PathVariable Long id) {
+        Long retrievedAccount = accountService.retrieveAccount(id);
+
+        HttpHeaders header = new HttpHeaders(); //adding account ID as a header
+        header.set("AccountId", retrievedAccount.toString());
+
+        return new ResponseEntity<AccountDTO>(header, HttpStatus.ACCEPTED);
+    }
+
+    /**
+     * A6: Silinen butun hesaplari geri getirir.
+     *
+     * @return      HTTP 202 | 404
+     */
+    @PutMapping("/retrieve")
+    public HttpStatus retrieveDeletedAccounts() {
+        accountService.retrieveAccounts();
+
+        return HttpStatus.ACCEPTED;
+    }
 }
