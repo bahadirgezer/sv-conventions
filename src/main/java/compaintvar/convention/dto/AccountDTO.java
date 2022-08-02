@@ -18,6 +18,10 @@ public class AccountDTO {
     Long id;
     String email;
     String username;
-    Set<Comment> comments = new HashSet<Comment>();
+    Set<CommentDTO> comments = new HashSet<CommentDTO>();
     Long commentCount;
+
+    //class Comments {
+    //    Set<CommentDTO> comments = new HashSet<CommentDTO>();
+    //}
 }

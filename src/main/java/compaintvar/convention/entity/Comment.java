@@ -16,7 +16,7 @@ import javax.persistence.*;
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class Comment {
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(nullable = false, unique = true, insertable = false, updatable = false)
     Long id;
 
@@ -27,9 +27,12 @@ public class Comment {
     @JoinColumn(name="owner_id", referencedColumnName = "id")
     Account owner;
 
-    @OneToOne(mappedBy = "next", fetch = FetchType.EAGER)
+    @OneToOne
     Comment previous;
 
-    @OneToOne(mappedBy = "previous")
+    @OneToOne
     Comment next;
+
+    @Column(nullable = false)
+    Boolean deleted = Boolean.FALSE;
 }
