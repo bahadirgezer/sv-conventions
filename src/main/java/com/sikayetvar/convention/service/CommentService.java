@@ -4,6 +4,7 @@ import com.sikayetvar.convention.dto.CommentDTO;
 import com.sikayetvar.convention.entity.Comment;
 import com.sikayetvar.convention.exceptions.MsDBOperationException;
 import com.sikayetvar.convention.exceptions.ResourceNotFoundException;
+import com.sikayetvar.convention.repository.AccountRepository;
 import com.sikayetvar.convention.repository.CommentRepository;
 import com.sun.istack.NotNull;
 import lombok.AccessLevel;
@@ -27,6 +28,7 @@ import java.util.stream.Collectors;
 public class CommentService {
 
     final CommentRepository commentRepository;
+    final AccountRepository accountRepository;
 
     /**
      * Verilen id değerine sahip yorumu doner.
@@ -52,10 +54,25 @@ public class CommentService {
         return new CommentDTO(
                 comment.getId(),
                 comment.getContent(),
-                comment.getOwner(),
-                comment.getPrevious(),
-                comment.getNext()
-        );
+                new CommentDTO.Account(
+                        comment.getOwner().getId(),
+                        comment.getOwner().getEmail(),
+                        comment.getOwner().getUsername()
+                ),
+                new CommentDTO.Comment(
+                        comment.getPrevious().getId(),
+                        comment.getPrevious().getContent(),
+                        comment.getPrevious().getOwner().getId(),
+                        comment.getPrevious().getPrevious().getId(),
+                        comment.getPrevious().getNext().getId()
+                ),
+                new CommentDTO.Comment(
+                        comment.getNext().getId(),
+                        comment.getNext().getContent(),
+                        comment.getNext().getOwner().getId(),
+                        comment.getNext().getPrevious().getId(),
+                        comment.getNext().getNext().getId()
+                ));
     }
 
 
@@ -66,14 +83,27 @@ public class CommentService {
      * @return              Kaydedilen Comment'in id degeri
      */
     public Long createComment(@NotNull CommentDTO commentDTO) {
-        Comment comment =
-                new Comment(
-                        commentDTO.getId(),
-                        commentDTO.getContent(),
-                        commentDTO.getOwner(),
-                        commentDTO.getPrevious(),
-                        commentDTO.getNext(),
-                        false);
+        Comment comment;
+        try {
+            comment =
+                    new Comment(
+                            commentDTO.getId(),
+                            commentDTO.getContent(),
+                            accountRepository.findAccountByIdAndDeletedFalse(
+                                    commentDTO.getOwner().getId()),
+                            commentRepository.findCommentByIdAndDeletedFalse(
+                                    commentDTO.getPrevious().getId()),
+                            commentRepository.findCommentByIdAndDeletedFalse(
+                                    commentDTO.getNext().getId()),
+                            false);
+        } catch (Exception e) {
+            log.error(e.getMessage(), e);
+            throw new MsDBOperationException("Unable to save comment");
+        }
+        if (comment == null) {
+            throw new ResourceNotFoundException(
+                    "Comment with id = " + commentDTO.getId() + " does not exist");
+        }
 
         if (comment.getContent().isBlank()) {
             throw new IllegalArgumentException(
@@ -113,8 +143,6 @@ public class CommentService {
             throw new ResourceNotFoundException(
                     "Comment with id = " + id + " does not exist");
         }
-
-
 
         Comment savedComment;
         try {
@@ -207,9 +235,26 @@ public class CommentService {
                     .map(comment -> new CommentDTO(
                             comment.getId(),
                             comment.getContent(),
-                            comment.getOwner(),
-                            comment.getPrevious(),
-                            comment.getNext())
+                            new CommentDTO.Account(
+                                    comment.getOwner().getId(),
+                                    comment.getOwner().getEmail(),
+                                    comment.getOwner().getUsername()
+                            ),
+                            new CommentDTO.Comment(
+                                    comment.getPrevious().getId(),
+                                    comment.getPrevious().getContent(),
+                                    comment.getPrevious().getOwner().getId(),
+                                    comment.getPrevious().getPrevious().getId(),
+                                    comment.getPrevious().getNext().getId()
+                            ),
+                            new CommentDTO.Comment(
+                                    comment.getNext().getId(),
+                                    comment.getNext().getContent(),
+                                    comment.getNext().getOwner().getId(),
+                                    comment.getNext().getPrevious().getId(),
+                                    comment.getNext().getNext().getId()
+
+                            ))
                     ).collect(Collectors.toList());
         }
         return new ArrayList<CommentDTO>();

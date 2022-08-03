@@ -8,6 +8,7 @@ import com.sikayetvar.convention.exceptions.DuplicateEntityError;
 import com.sikayetvar.convention.exceptions.MsDBOperationException;
 import com.sikayetvar.convention.exceptions.ResourceNotFoundException;
 import com.sikayetvar.convention.repository.AccountRepository;
+import com.sikayetvar.convention.repository.CommentRepository;
 import com.sun.istack.NotNull;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +31,7 @@ import java.util.stream.Collectors;
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class AccountService {
 
+    final CommentRepository commentRepository;
     final AccountRepository accountRepository;
 
     /**
@@ -78,24 +80,36 @@ public class AccountService {
      * @return              Kaydedilen Account'un id degeri
      */
     public Long createAccount(@NotNull AccountDTO accountDTO) {
-        Account account =
-                new Account(
-                        accountDTO.getId(),
-                        accountDTO.getEmail(),
-                        accountDTO.getUsername(),
-                        accountDTO.getComments()
-                                .stream()
-                                .map(commentDTO -> new Comment(
-                                        commentDTO.getId(),
-                                        commentDTO.getContent(),
-                                        commentDTO.getOwnerId(),
-                                        commentDTO.getPreviousId(),
-                                        commentDTO.getNextId(),
-                                        false
-                                ))
-                                .collect(Collectors.toSet()),
-                        accountDTO.getCommentCount(),
-                        false);
+        Account account;
+        try {
+            account = new Account(
+                            accountDTO.getId(),
+                            accountDTO.getEmail(),
+                            accountDTO.getUsername(),
+                            accountDTO.getComments()
+                                    .stream()
+                                    .map(commentDTO -> new Comment(
+                                            commentDTO.getId(),
+                                            commentDTO.getContent(),
+                                            accountRepository.findAccountByIdAndDeletedFalse(
+                                                    commentDTO.getOwnerId()),
+                                            commentRepository.findCommentByIdAndDeletedFalse(
+                                                    commentDTO.getPreviousId()),
+                                            commentRepository.findCommentByIdAndDeletedFalse(
+                                                    commentDTO.getNextId()),
+                                            false
+                                    ))
+                                    .collect(Collectors.toSet()),
+                            accountDTO.getCommentCount(),
+                            false);
+        } catch (Exception e) {
+            log.error(e.getMessage(), e);
+            throw new MsDBOperationException("Unable to find entity");
+        }
+        if (account == null) {
+            throw new ResourceNotFoundException(
+                    "Account with id = " + accountDTO.getId() + " does not exist");
+        }
 
         if (accountRepository.existsByEmail(account.getEmail()))
             throw new DuplicateEntityError(
