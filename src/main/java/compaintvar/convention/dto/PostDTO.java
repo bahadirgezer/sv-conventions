@@ -1,21 +1,23 @@
 package compaintvar.convention.dto;
 
-import compaintvar.convention.entity.Account;
-import compaintvar.convention.entity.Comment;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.FieldDefaults;
 
+import java.sql.Timestamp;
+
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE)
-public class CommentDTO {
+public class PostDTO {
     Long id;
-    String content;
-    Account owner;
-    Comment previous;
-    Comment next;
+    Long userId;
+    String title;
+    String body;
+    Long topicId;
+    Timestamp createTime;
+    Timestamp updateTime;
 }
